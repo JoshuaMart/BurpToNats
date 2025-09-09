@@ -9,6 +9,10 @@ import burp.api.montoya.http.message.HttpHeader;
 import java.util.List;
 import java.util.Properties;
 import java.io.FileInputStream;
+import java.util.Map;
+import java.util.HashMap;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 import static burp.api.montoya.http.handler.RequestToBeSentAction.continueWith;
 import static burp.api.montoya.http.handler.ResponseReceivedAction.continueWith;
@@ -64,10 +68,27 @@ class MyHttpHandler implements HttpHandler {
         List<HttpHeader> headers = requestToBeSent.headers();
         String body = requestToBeSent.body().toString();
         String method = requestToBeSent.method();
+        String httpVersion = requestToBeSent.httpVersion();
+
+        Map<String, String> headersMap = new HashMap<>();
+        for (HttpHeader header : headers) {
+            headersMap.put(header.name(), header.value());
+        }
+
+        GsonBuilder gsonBuilder = new GsonBuilder();
+        Gson gson = gsonBuilder.create();
+
+        Map<String, Object> requestData = new HashMap<>();
+        requestData.put("url", url);
+        requestData.put("method", method);
+        requestData.put("httpVersion", httpVersion);
+        requestData.put("body", body);
+        requestData.put("headers", headersMap);
+        String requestJson = gson.toJson(requestData);
 
         if (natsConnection != null) {
             try {
-                natsConnection.publish("burp", requestToBeSent.toString().getBytes());
+                natsConnection.publish("burp", requestJson.getBytes());
                 api.logging().logToOutput("Sent request to NATS");
             }
             catch (Exception e) {
