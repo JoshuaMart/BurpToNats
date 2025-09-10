@@ -60,6 +60,10 @@ The extension supports configurable NATS server URLs through properties files. I
 1. `~/nats.properties`
 2. `~/.burp/nats.properties`
 
+If the server requires authentication, it is possible to place the file with the credentials in the following locations (in order):
+1. `~/nats.creds`
+2. `~/.burp/nats.creds`
+
 ### Configuration File Format
 
 Create a `nats.properties` file with:

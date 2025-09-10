@@ -13,6 +13,9 @@ import java.util.Map;
 import java.util.HashMap;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import java.io.File;
+import java.nio.file.Paths;
+import io.nats.client.Options;
 
 import static burp.api.montoya.http.handler.RequestToBeSentAction.continueWith;
 import static burp.api.montoya.http.handler.ResponseReceivedAction.continueWith;
@@ -38,12 +41,11 @@ class MyHttpHandler implements HttpHandler {
 
             boolean configLoaded = false;
             for (String configPath : configPaths) {
-                try {
+                try (FileInputStream fis = new FileInputStream(configPath)) {
                     Properties properties = new Properties();
-                    properties.load(new FileInputStream(configPath));
+                    properties.load(fis);
                     natsUrl = properties.getProperty("natsUrl", natsUrl);
                     api.logging().logToOutput("Loaded NATS config from: " + configPath);
-
                     configLoaded = true;
                     break;
                 } catch (Exception e) {
@@ -55,8 +57,32 @@ class MyHttpHandler implements HttpHandler {
                 api.logging().logToOutput("No config file found, using default NATS URL: " + natsUrl);
             }
 
-            natsConnection = Nats.connect(natsUrl);
-            api.logging().logToOutput("Connected to NATS: " + natsUrl);
+            String[] credsPaths = {
+                System.getProperty("user.home") + "/nats.creds",
+                System.getProperty("user.home") + "/.burp/nats.creds"
+            };
+
+            String credsPath = null;
+            for (String p : credsPaths) {
+                if (new File(p).exists()) {
+                    credsPath = p;
+                    break;
+                }
+            }
+
+           if (credsPath != null) {
+                api.logging().logToOutput("Using creds file: " + credsPath);
+                Options options = new Options.Builder()
+                        .server(natsUrl)
+                        .authHandler(Nats.credentials(credsPath))
+                        .build();
+                natsConnection = Nats.connect(options);
+            } else {
+                api.logging().logToOutput("No creds file found, using unauthenticated connection.");
+                natsConnection = Nats.connect(natsUrl);
+            }
+
+            api.logging().logToOutput("Connected to NATS: " + natsUrl + (credsPath != null ? " (with creds)" : ""));
         } catch (Exception e) {
             api.logging().logToError("Failed to connect to NATS: " + e.getMessage());
         }
