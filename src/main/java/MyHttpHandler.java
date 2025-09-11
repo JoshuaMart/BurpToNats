@@ -114,8 +114,10 @@ class MyHttpHandler implements HttpHandler {
 
         if (natsConnection != null) {
             try {
-                natsConnection.publish("burp", requestJson.getBytes());
-                api.logging().logToOutput("Sent request to NATS");
+                if (api.scope().isInScope(url)) {
+                    natsConnection.publish("burp", requestJson.getBytes());
+                    api.logging().logToOutput("Sent request to NATS");
+                }
             }
             catch (Exception e) {
                 api.logging().logToError("Failed to send request to NATS: " + e.getMessage());
