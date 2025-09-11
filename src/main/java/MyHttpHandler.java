@@ -17,6 +17,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -112,10 +113,12 @@ class MyHttpHandler implements HttpHandler {
             final String url = req.url();
 
             final List<HttpHeader> headers = req.headers();
-            final Map<String, String> headersMap = new LinkedHashMap<>(Math.max(16, headers.size()));
+            final List<Map<String, String>> headersList = new ArrayList<>(headers.size());
             for (HttpHeader h : headers) {
-                // En cas de doublons, la dernière valeur l'emporte
-                headersMap.put(h.name(), h.value());
+                Map<String, String> headerMap = new LinkedHashMap<>(2);
+                headerMap.put("name", h.name());
+                headerMap.put("value", h.value());
+                headersList.add(headerMap);
             }
 
             final String body = req.body() != null ? req.body().toString() : "";
@@ -125,7 +128,7 @@ class MyHttpHandler implements HttpHandler {
             payload.put("method", req.method());
             payload.put("httpVersion", req.httpVersion());
             payload.put("body", body);
-            payload.put("headers", headersMap);
+            payload.put("headers", headersList);
 
             final byte[] bytes = gson.toJson(payload).getBytes(StandardCharsets.UTF_8);
 
