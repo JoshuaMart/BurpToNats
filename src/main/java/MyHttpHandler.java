@@ -12,9 +12,13 @@ import io.nats.client.Connection;
 import io.nats.client.ConsumerContext;
 import io.nats.client.Nats;
 import io.nats.client.Options;
+import io.nats.client.JetStream;
+import io.nats.client.api.PublishAck;
+import io.nats.client.JetStreamApiException;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -22,12 +26,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+
 import static burp.api.montoya.http.handler.RequestToBeSentAction.continueWith;
 import static burp.api.montoya.http.handler.ResponseReceivedAction.continueWith;
 
 class MyHttpHandler implements HttpHandler {
 
     private static final String DEFAULT_NATS_URL = "nats://localhost:4222";
+    private static final String STREAM_SUBJECT = "fuzzr";
+
     private static final String[] DEFAULT_CONFIG_PATHS = {
             System.getProperty("user.home") + "/nats.properties",
             System.getProperty("user.home") + "/.burp/nats.properties"
@@ -37,11 +44,10 @@ class MyHttpHandler implements HttpHandler {
             System.getProperty("user.home") + "/.burp/nats.creds"
     };
 
-    private static final String SUBJECT_HTTP_REQUEST = "burp";
-
     private final MontoyaApi api;
     private final Gson gson;
     private final Connection nats;
+    private JetStream jetStream;
 
     MyHttpHandler(MontoyaApi api) {
         this.api = api;
@@ -75,6 +81,8 @@ class MyHttpHandler implements HttpHandler {
             }
 
             Connection c = Nats.connect(builder.build());
+            jetStream = c.jetStream();
+
             api.logging().logToOutput("Connected to NATS at " + natsUrl + (credsPath != null ? " (creds)" : ""));
             return c;
         } catch (Exception e) {
@@ -129,13 +137,22 @@ class MyHttpHandler implements HttpHandler {
 
             final byte[] bytes = gson.toJson(payload).getBytes(StandardCharsets.UTF_8);
 
-            if (nats != null) {
-                nats.publish(SUBJECT_HTTP_REQUEST, bytes);
-                api.logging().logToOutput(String.format("Published HTTP request to NATS (%s %s)", req.method(), req.url()));
+            if (jetStream != null) {
+                try {
+                    PublishAck ack = jetStream.publish(STREAM_SUBJECT, bytes);
+                    api.logging().logToOutput("Sent request to NATS - Stream: " + ack.getStream() + ", Sequence: " + ack.getSeqno());
+                } catch (JetStreamApiException e) {
+                    api.logging().logToError("JetStream API error: " + e.getMessage());
+                } catch (IOException e) {
+                    api.logging().logToError("IO error sending to NATS: " + e.getMessage());
+                } catch (Exception e) {
+                    api.logging().logToError("Failed to send request to NATS: " + e.getMessage());
+                }
             }
         } catch (Exception e) {
-            api.logging().logToError("Failed to process/publish request: " + e.getMessage());
+            api.logging().logToError("General error processing message: " + e.getMessage());
         }
+
         return continueWith(req);
     }
 
